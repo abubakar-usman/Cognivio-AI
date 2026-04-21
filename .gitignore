@@ -1,0 +1,22 @@
+# Temporary generated files
+temp_video/
+temp_audio/
+
+public/
+uploads/
+# Puppeteer browser session data
+gamma_session/
+user_data/
+user_session/
+
+# Dependencies
+node_modules/
+
+# Environment
+.env
+
+test_recorder.js
+
+# Remotion Output
+build/
+.remotion/
