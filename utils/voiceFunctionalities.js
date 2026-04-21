@@ -1,0 +1,114 @@
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import path from "path";
+import fs from "fs";
+import { pipeline } from "stream/promises"; // specific import for cleaner stream handling
+import { getAudioDurationInSeconds } from "get-audio-duration";
+
+const elevenlabs = new ElevenLabsClient({
+  apiKey: process.env.ELEVEN_LABS_API_KEY,
+});
+
+export const generateVoice = async (text, docId) => {
+  try {
+    const audioBuffer = await elevenlabs.textToSpeech.convert(
+      "bbGtsRRKUfYO634UxSjz",
+      {
+        text: text,
+        modelId: "eleven_flash_v2_5",
+        outputFormat: "mp3_44100_128",
+      },
+    );
+
+    const uploadDir = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    const outputPath = path.join(uploadDir, `voice_${docId}_${Date.now()}.mp3`);
+
+    // Write the buffer directly to file
+    await fs.promises.writeFile(outputPath, audioBuffer);
+
+    console.log("Audio saved with voice:", outputPath);
+
+    return outputPath;
+  } catch (error) {
+    console.error("Error generateing voice overview", error);
+  }
+};
+
+export const generatePodcast = async (script, docId) => {
+  try {
+    const dialogue = JSON.parse(script);
+
+    const audioStream = await elevenlabs.textToDialogue.convert({
+      voiceId: "bbGtsRRKUfYO634UxSjz", // Optional: Provide a default/fallback Voice ID
+      inputs: dialogue,
+    });
+
+    const uploadDir = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    const outputPath = path.join(
+      uploadDir,
+      `podcast_${docId}_${Date.now()}.mp3`,
+    );
+    const fileWriteStream = fs.createWriteStream(outputPath);
+
+    // 2. Pipe the stream to the file
+    await pipeline(audioStream, fileWriteStream);
+
+    console.log("Podcast saved:", outputPath);
+
+    return outputPath;
+  } catch (error) {
+    console.error("Error generating podcast:", error);
+  }
+};
+
+export const generateVideoScript = async (scriptData, docId) => {
+  const audioAssets = [];
+  const tempDir = path.join(process.cwd(), "temp_audio", docId.toString()); // Create a temp folder
+
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+
+  console.log(
+    `Starting audio generation for ${scriptData.slides.length} slides...`,
+  );
+
+  try {
+    for (const slide of scriptData.slides) {
+      const fileName = `slide_${slide.index}_${Date.now()}.mp3`;
+      const filePath = path.join(tempDir, fileName);
+
+      const audioStream = await elevenlabs.textToSpeech.convert(
+        "bbGtsRRKUfYO634UxSjz",
+        {
+          text: slide.voiceover_script,
+          model_id: "eleven_flash_v2_5",
+          output_format: "mp3_44100_128",
+        },
+      );
+
+      const fileWriteStream = fs.createWriteStream(filePath);
+      await pipeline(audioStream, fileWriteStream);
+
+      const duration = await getAudioDurationInSeconds(filePath);
+
+      console.log(`Generated Slide ${slide.index}: ${duration}s`);
+
+      audioAssets.push({
+        index: slide.index,
+        filePath: filePath,
+        duration: duration,
+      });
+    }
+
+    return audioAssets;
+  } catch (error) {
+    console.error("Error generating video audio assets:", error);
+    throw error;
+  }
+};
